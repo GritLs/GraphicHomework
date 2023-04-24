@@ -64,7 +64,7 @@ ThreeTypePolygons BlockToLine();             // 将墙体的块表示成点集�
 int main()
 {
     initGame();
-
+//???
     while (1)
     {
         if (!upDate()) break;	// 更新
