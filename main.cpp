@@ -50,9 +50,14 @@ void drawGround(POINT pos);		// 绘制地面图块的函数
 void drawFillState(POINT pos);	// 绘制油灯图块的函数
 void drawEndPos(POINT pos);		// 绘制终点
 void drawPlayer();				// 绘制人物的函数
-//void drawView();				// 绘制视野
 
-void BlockToLine();             // 将墙体的块表示成点集用于多边形分割算法
+//三种多边形，分别为墙体、油灯、终点，地面不填充
+struct ThreeTypePolygons {
+    vector<vector<POINT>> polygonWall;      //墙体多边形
+    vector<vector<POINT>> polygonFillState; //油灯多边形
+    vector<vector<POINT>> polygonEndPos;    //终点位置多边形
+};
+ThreeTypePolygons BlockToLine();             // 将墙体的块表示成点集用于多边形分割算法
 
 
 
@@ -175,6 +180,51 @@ void initGame()
     BeginBatchDraw();					// 开始缓冲绘制
 }
 
+
+
+//返回一个三种块类型的点集的结构体用于裁剪算法的实现
+ThreeTypePolygons BlockToLine(){
+    // 创建一个表示多边形数组的向量
+    ThreeTypePolygons drawArea;
+
+    // 遍历 g_GameMap
+    for (int i = 0; i < GAME_HEIGHT; i++) {
+        for (int j = 0; j < GAME_WIDTH; j++) {
+            vector<POINT> polygon;
+            int x1 = i * g_BlockSize;
+            int y1 = j * g_BlockSize;
+            int x2 = x1;
+            int y2 = y1+ g_BlockSize;
+            int x3 = x1+ g_BlockSize;
+            int y3 = y1+ g_BlockSize;
+            int x4 = x1+ g_BlockSize;
+            int y4 = y1;
+
+            polygon.push_back({x1, y1});
+            polygon.push_back({x2, y2});
+            polygon.push_back({x3, y3});
+            polygon.push_back({x4, y4});
+
+            if (g_GameMap[i][j] == WALL) {
+
+                drawArea.polygonWall.push_back(polygon);
+            }
+            if (g_GameMap[i][j] == FILLSTATE ) {
+
+                drawArea.polygonFillState.push_back(polygon);
+            }
+            if (g_GameMap[i][j] == ENDPOS) {
+
+                drawArea.polygonEndPos.push_back(polygon);
+            }
+        }
+    }
+
+    return drawArea;
+}
+
+
+
 void endGame()
 {
     EndBatchDraw();						// 结束缓冲绘制
@@ -244,37 +294,7 @@ bool upDate()
     g_ViewArray = MAXVIEW - loseTime / 1000.0 / DARKTIME;	// 每一段时间油灯的照明力会下降一个图块
     if (g_ViewArray < MINVIEW) g_ViewArray = MINVIEW;
 
-//    // 处理鼠标消息
-//    MOUSEMSG mouseMsg;							// 鼠标信息
-//    int lastBlockSize = g_BlockSize;			// 保存原本的大小
-//    while (MouseHit())
-//    {
-//        mouseMsg = GetMouseMsg();
-//        if (mouseMsg.uMsg = WM_MOUSEWHEEL)		// 滚轮消息
-//        {
-//            g_BlockSize += mouseMsg.wheel / 120;
-//        }
-//    }
-//
-//    // 如果没有滚轮消息就退出
-//    if (lastBlockSize == g_BlockSize) return true;
-//    // 处理滚轮消息
-//    if (g_BlockSize >= 10 && g_BlockSize <= 50)	// 块大小没有达到极限值
-//    {
-//        // 保证缩放后的地图不会比窗口小
-//        if (GAME_WIDTH * g_BlockSize < WIN_WIDTH ||
-//            GAME_HEIGHT * g_BlockSize < WIN_HEIGHT)
-//            g_BlockSize = lastBlockSize;
-//        rePaintMap();							// 重绘地图
-//        // 重新计算玩家在地图上的位置
-//        POINT mapPos = { g_PlayerPos.x / lastBlockSize,g_PlayerPos.y / lastBlockSize };	// 计算在地图上的位置
-//        g_PlayerPos.x = mapPos.x * g_BlockSize + g_BlockSize / 2;	// 计算映射后的位置
-//        g_PlayerPos.y = mapPos.y * g_BlockSize + g_BlockSize / 2;	// 计算映射后的位置
-//        computeCameraPos();						// 重新计算摄像机位置
-//    }
-//    // 保证图块不会过大和过小
-//    if (g_BlockSize < 10) g_BlockSize = 10;
-//    if (g_BlockSize > 50) g_BlockSize = 50;
+
 
     return true;
 }
@@ -399,26 +419,3 @@ void drawPlayer()
     solidcircle(g_PlayerPos.x - g_CameraPos.x, g_PlayerPos.y - g_CameraPos.y, 3);
 }
 
-//void drawView()
-//{
-//    // 锁定视野
-//    //删除
-//    HRGN viewArr;
-//
-//    int r = int(g_BlockSize * g_ViewArray + 0.5);	// 计算视野半径
-//    POINT orgin = g_PlayerPos;
-//    orgin.x -= g_CameraPos.x;						// 计算在屏幕上的位置
-//    orgin.y -= g_CameraPos.y;						// 计算在屏幕上的位置
-//
-//
-//    viewArr = CreateEllipticRgn(orgin.x - r, orgin.y - r, orgin.x + r, orgin.y + r);	// 创建一个圆形的区域
-//    setcliprgn(viewArr);							// 锁定区域
-//
-//    // 绘制地图
-//    putimage(0, 0, WIN_WIDTH, WIN_HEIGHT, &g_MapImage, g_CameraPos.x, g_CameraPos.y);
-//
-//    // 删除区域
-////    DeleteObject(viewArr);
-//    // 消除区域
-////    setcliprgn(NULL);
-//}
