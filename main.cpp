@@ -34,7 +34,7 @@ IMAGE	g_MapImage;				// 地图的图片(由于地图是固定的，在不改变�
 double	g_ViewArray;			// 视野
 UINT	g_BeginTime;			// 游戏开始时的时间
 UINT	g_LastFillTime;			// 上次为油灯加油的时间
-
+vector<POINT> viewSquare; //视野范围
 
 // 函数列表
 void initGame();				// 初始化游戏
@@ -45,12 +45,6 @@ void absDelay(int delay);		// 绝对延迟
 
 bool canMove(POINT pos);		// 判断某个位置是否可以移动
 void computeCameraPos();		// 计算摄像机在地图上的位置
-void rePaintMap();				// 重绘地图
-
-void drawWall(POINT pos);		// 绘制墙壁图块的函数
-void drawGround(POINT pos);		// 绘制地面图块的函数
-void drawFillState(POINT pos);	// 绘制油灯图块的函数
-void drawEndPos(POINT pos);		// 绘制终点
 void drawPlayer();				// 绘制人物的函数
 
 //三种多边形，分别为墙体、油灯、终点，地面不填充
@@ -62,7 +56,7 @@ struct ThreeTypePolygons {
 ThreeTypePolygons BlockToLine();             // 将墙体的块表示成点集用于多边形分割算法
 void clip_polygons(const vector<POINT> &viewSquare); //实现多边形裁剪
 // here test
-void draw_debugger(const ThreeTypePolygons &polygons);
+void draw_current(const ThreeTypePolygons &polygons);
 int main()
 {
     initGame();
@@ -77,7 +71,7 @@ int main()
     endGame();
     return 0;
 }
-////
+
 void initGame()
 {
     g_BlockSize = 32;			// 初始图块大小为 32 个像素
@@ -166,15 +160,11 @@ void initGame()
 
     //////////////////生成完墙和灯之后，将墙和灯用线段表示////////////////
     polygonOrigin = BlockToLine();
-
-    ///////////////////////////////////////////////////////////////
-
     g_GameMap[GAME_HEIGHT - 2][GAME_WIDTH - 2] = ENDPOS;		// 标记终点
     g_EndPos = { GAME_WIDTH - 2,GAME_HEIGHT - 2 };				// 确定终点位置
     g_ViewArray = MAXVIEW;				// 初始视野是最大的
     g_BeginTime = GetTickCount();		// 开始计时
     g_LastFillTime = GetTickCount();	// 油灯加油的时间
-    rePaintMap();						// 绘制地图
     g_PlayerPos = { g_BlockSize * 3 / 2,g_BlockSize * 3 / 2 };	// 初始化人的位置
     computeCameraPos();					// 计算摄像机的位置
     initgraph(WIN_WIDTH, WIN_HEIGHT);	// 初始化画布
@@ -193,14 +183,14 @@ ThreeTypePolygons BlockToLine(){
     for (int i = 0; i < GAME_HEIGHT; i++) {
         for (int j = 0; j < GAME_WIDTH; j++) {
             vector<POINT> polygon;
-            int x1 = i * g_BlockSize;
-            int y1 = j * g_BlockSize;
-            int x2 = x1;
-            int y2 = y1+ g_BlockSize;
+            int x1 = j * g_BlockSize;
+            int y1 = i * g_BlockSize;
+            int x2 = x1 +g_BlockSize;
+            int y2 = y1;
             int x3 = x1+ g_BlockSize;
             int y3 = y1+ g_BlockSize;
-            int x4 = x1+ g_BlockSize;
-            int y4 = y1;
+            int x4 = x1;
+            int y4 = y1+ g_BlockSize;
 
             polygon.push_back({x1, y1});
             polygon.push_back({x2, y2});
@@ -212,6 +202,12 @@ ThreeTypePolygons BlockToLine(){
                 drawArea.polygonWall.push_back(polygon);
             }
             if (g_GameMap[i][j] == FILLSTATE ) {
+                polygon.clear();
+                int bias = int(g_BlockSize/5);
+                polygon.push_back({x1+bias, y1+bias});
+                polygon.push_back({x2-bias, y2+bias});
+                polygon.push_back({x3-bias, y3-bias});
+                polygon.push_back({x4+bias, y4-bias});
 
                 drawArea.polygonFillState.push_back(polygon);
             }
@@ -235,16 +231,12 @@ void endGame()
 
 void draw()
 {
+    //设置背景色
+    setbkcolor(WHITE);
     // 清空设备
     cleardevice();
-    // 绘制视野
-//    drawView();
-
-    ////////////////////改成rePaintMap()
-    rePaintMap();
-    ///////////////////////////////////
     //测试画图
-    draw_debugger(polygonCurrent);
+    draw_current(polygonCurrent);
     // 绘制人
     drawPlayer();
     FlushBatchDraw();	// 刷新屏幕
@@ -255,10 +247,10 @@ bool upDate()
     POINT nextPos = g_PlayerPos;		// 下一个位置
 
     // 获取键盘输入并计算下一个位置
-    if (GetKeyState(VK_UP) & 0x8000)	nextPos.y -= 2;
-    if (GetKeyState(VK_DOWN) & 0x8000)	nextPos.y += 2;
-    if (GetKeyState(VK_LEFT) & 0x8000)	nextPos.x -= 2;
-    if (GetKeyState(VK_RIGHT) & 0x8000)	nextPos.x += 2;
+    if (GetKeyState(VK_UP) & 0x8000)	nextPos.y -= 3;
+    if (GetKeyState(VK_DOWN) & 0x8000)	nextPos.y += 3;
+    if (GetKeyState(VK_LEFT) & 0x8000)	nextPos.x -= 3;
+    if (GetKeyState(VK_RIGHT) & 0x8000)	nextPos.x += 3;
 
     // 如果下一个位置不合法
     if (!canMove(nextPos))
@@ -291,23 +283,18 @@ bool upDate()
     g_ViewArray = MAXVIEW - loseTime / 1000.0 / DARKTIME;	// 每一段时间油灯的照明力会下降一个图块
     if (g_ViewArray < MINVIEW) g_ViewArray = MINVIEW;
 
-    //////////////////////////////////////////////////////////////
     int r = int(g_BlockSize * g_ViewArray + 0.5)/2;	// 计算视野半径
     // 把视野正方形表示出来
-    vector<POINT> viewSquare = {{g_PlayerPos.y-r,g_PlayerPos.x+r},
-                                {g_PlayerPos.y-r,g_PlayerPos.x-r},
-                                {g_PlayerPos.y+r,g_PlayerPos.x-r},
-                                {g_PlayerPos.y+r,g_PlayerPos.x+r}};//reverse
+    viewSquare = {{g_PlayerPos.x-r,g_PlayerPos.y+r},
+                {g_PlayerPos.x-r,g_PlayerPos.y-r},
+                {g_PlayerPos.x+r,g_PlayerPos.y-r},
+                {g_PlayerPos.x+r,g_PlayerPos.y+r}};//reverse
 
-    //////////////////////////////////////////////////////////////
+
     // 在这里应用裁剪算法，拿视野区域进行裁剪
     // 实现Sutherland-Hodgman算法，传入视野正方形的结构体，然后以这个正方形为边界对polygonOrigin
     // 进行裁剪，并将结果存入polygonCurrent
     clip_polygons(viewSquare);
-
-    // 绘图填充
-    //
-
     return true;
 }
 
@@ -316,12 +303,6 @@ bool inside(POINT p, POINT A, POINT B) {
 }
 
 POINT intersection(POINT prev, POINT cur, POINT A, POINT B) {
-//    float ua = ((B.x - A.x) * (prev.y - A.y) - (B.y - A.y) * (prev.x - A.x)) /
-//               ((B.y - A.y) * (cur.x - prev.x) - (B.x - A.x) * (cur.y - prev.y));
-//    POINT ret;
-//    ret.x = prev.x + ua * (cur.x - prev.x);
-//    ret.y = prev.y + ua * (cur.y - prev.y);
-//    return ret;
     POINT ret;
     if(A.y==B.y){
         ret.y = A.y;
@@ -380,9 +361,6 @@ void clip_polygons(const vector<POINT> &viewSquare) {
 }
 
 
-
-
-
 void absDelay(int delay)
 {
     static int curtime = GetTickCount();
@@ -419,102 +397,64 @@ void computeCameraPos()
 }
 
 
-void draw_debugger(const ThreeTypePolygons &polygons) {
-    setcolor(GREEN);
-//    cout << "camera:(" << g_CameraPos.x << ", " << g_CameraPos.y << ")\n";
-    for (const auto &polygon : polygons.polygonWall) {
+void vectorToPointArray(const std::vector<POINT>& points, POINT*& point_array)
+{
+    point_array = new POINT[points.size()];
+    for (size_t i = 0; i < points.size(); i++) {
+        point_array[i] = points[i];
+    }
+}
+
+void draw_current(const ThreeTypePolygons &polygons) {
+
+    int x1 = viewSquare[1].x-g_CameraPos.x;
+    int y1 = viewSquare[1].y-g_CameraPos.y;
+    int x2 = viewSquare[3].x-g_CameraPos.x;
+    int y2 = viewSquare[3].y-g_CameraPos.y;
+    setfillcolor(BLACK);
+    setlinecolor(BLACK);
+    fillrectangle(0,0,x1,getheight());
+    fillrectangle(0,0,getwidth(),y1);
+    fillrectangle(x2,0,getwidth(),getheight());
+    fillrectangle(0,y2,getwidth(),getheight());
+
+
+    setfillcolor(RGB(130,57,53));
+    setlinecolor(RGB(130,57,53));
+    for (auto polygon : polygons.polygonWall) {
         for (size_t i = 0; i < polygon.size(); ++i) {
-            line(polygon[i].y - g_CameraPos.x, polygon[i].x - g_CameraPos.y,
-                 polygon[(i + 1) % polygon.size()].y - g_CameraPos.x, polygon[(i + 1) % polygon.size()].x - g_CameraPos.y);//reverse
+            polygon[i].x = polygon[i].x - g_CameraPos.x;
+            polygon[i].y = polygon[i].y - g_CameraPos.y;
         }
-        if(polygon.size()!=0&&polygon.size()!=4) cout<<polygon.size()<<endl;
+
+        POINT* point_array = nullptr;
+        vectorToPointArray(polygon, point_array);
+        fillpolygon(point_array,polygon.size());
     }
 
-//    for (const auto &polygon : polygons.polygonFillState) {
-//        for (size_t i = 0; i < polygon.size(); ++i) {
-//            line(polygon[i].x, polygon[i].y, polygon[(i + 1) % polygon.size()].x, polygon[(i + 1) % polygon.size()].y);
-//        }
-//        if(polygon.size()!=0&&polygon.size()!=4) cout<<polygon.size()<<endl;
-//    }
-//
-//    for (const auto &polygon : polygons.polygonEndPos) {
-//        for (size_t i = 0; i < polygon.size(); ++i) {
-//            line(polygon[i].x, polygon[i].y, polygon[(i + 1) % polygon.size()].x, polygon[(i + 1) % polygon.size()].y);
-//        }
-//        if(polygon.size()!=0&&polygon.size()!=4) cout<<polygon.size()<<endl;
-//    }
-}
-
-void rePaintMap()
-{
-    g_MapImage.Resize(GAME_WIDTH * g_BlockSize, GAME_HEIGHT * g_BlockSize);	// 重置地图图片大小
-    SetWorkingImage(&g_MapImage);								// 设置地图图片为当前工作图片
-
-    for (int i = 0; i < GAME_HEIGHT; i++)
-    {
-        for (int j = 0; j < GAME_WIDTH; j++)
-        {
-            switch (g_GameMap[i][j])
-            {
-                case WALL:
-                    drawWall({ j*g_BlockSize,i*g_BlockSize });		// 绘制墙壁
-                    break;
-                case FILLSTATE:
-                    drawFillState({ j*g_BlockSize,i*g_BlockSize });	// 绘制加油站
-                    break;
-                case GROUND:
-                    drawGround({ j*g_BlockSize,i*g_BlockSize });	// 绘制地面
-                    break;
-                case ENDPOS:
-                    drawEndPos({ j*g_BlockSize,i*g_BlockSize });
-                    break;
-            }
+    setfillcolor(RGB(244,208,0));
+    setlinecolor(RGB(244,208,0));
+    for (auto polygon : polygons.polygonFillState) {
+        for (size_t i = 0; i < polygon.size(); ++i) {
+            polygon[i].x = polygon[i].x - g_CameraPos.x;
+            polygon[i].y = polygon[i].y - g_CameraPos.y;
         }
+
+        POINT* point_array = nullptr;
+        vectorToPointArray(polygon, point_array);
+        fillpolygon(point_array,polygon.size());
     }
+    setfillcolor(BLUE);
+    for (auto polygon : polygons.polygonEndPos) {
+        for (size_t i = 0; i < polygon.size(); ++i) {
+            polygon[i].x = polygon[i].x - g_CameraPos.x;
+            polygon[i].y = polygon[i].y - g_CameraPos.y;
+        }
 
-
-    SetWorkingImage();	// 复位工作图片
-
-    ////////////////////////////////////////////////////////////
-
-    POINT orgin = g_PlayerPos;
-    orgin.x -= g_CameraPos.x;						// 计算在屏幕上的位置
-    orgin.y -= g_CameraPos.y;						// 计算在屏幕上的位置
-    putimage(0, 0, WIN_WIDTH, WIN_HEIGHT, &g_MapImage, g_CameraPos.x, g_CameraPos.y);
-}
-
-void drawWall(POINT pos)
-{
-    setfillcolor(RGB(254, 109, 19));
-    solidrectangle(pos.x, pos.y, pos.x + g_BlockSize, pos.y + g_BlockSize);
-}
-
-void drawGround(POINT pos)
-{
-    setfillcolor(RGB(255, 255, 255));
-    solidrectangle(pos.x, pos.y, pos.x + g_BlockSize, pos.y + g_BlockSize);
-}
-
-void drawFillState(POINT pos)
-{
-    drawGround(pos);
-
-    // 绘制圆角矩形
-    pos.x += g_BlockSize / 5;
-    pos.y += g_BlockSize / 5;
-    setfillcolor(RGB(252, 213, 11));
-    solidroundrect(pos.x, pos.y, pos.x + g_BlockSize / 5 * 3, pos.y + g_BlockSize / 5 * 3, g_BlockSize / 8, g_BlockSize / 8);
-}
-
-void drawEndPos(POINT pos)
-{
-    drawGround(pos);
-
-    // 绘制圆角矩形
-    pos.x += g_BlockSize / 5;
-    pos.y += g_BlockSize / 5;
-    setfillcolor(RGB(87, 116, 48));
-    solidroundrect(pos.x, pos.y, pos.x + g_BlockSize / 5 * 3, pos.y + g_BlockSize / 5 * 3, g_BlockSize / 8, g_BlockSize / 8);
+        POINT* point_array = nullptr;
+        vectorToPointArray(polygon, point_array);
+        fillpolygon(point_array,polygon.size());
+    }
 }
 
 void drawPlayer()
