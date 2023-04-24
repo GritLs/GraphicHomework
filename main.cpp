@@ -56,7 +56,7 @@ struct ThreeTypePolygons {
     vector<vector<POINT>> polygonWall;      //墙体多边形
     vector<vector<POINT>> polygonFillState; //油灯多边形
     vector<vector<POINT>> polygonEndPos;    //终点位置多边形
-};
+}polygonOrigin, polygonCurrent;
 ThreeTypePolygons BlockToLine();             // 将墙体的块表示成点集用于多边形分割算法
 
 
@@ -64,7 +64,7 @@ ThreeTypePolygons BlockToLine();             // 将墙体的块表示成点集�
 int main()
 {
     initGame();
-//???
+
     while (1)
     {
         if (!upDate()) break;	// 更新
@@ -75,7 +75,7 @@ int main()
     endGame();
     return 0;
 }
-
+////
 void initGame()
 {
     g_BlockSize = 32;			// 初始图块大小为 32 个像素
@@ -163,7 +163,7 @@ void initGame()
     }
 
     //////////////////生成完墙和灯之后，将墙和灯用线段表示////////////////
-
+    polygonOrigin = BlockToLine();
 
     ///////////////////////////////////////////////////////////////
 
@@ -294,7 +294,17 @@ bool upDate()
     g_ViewArray = MAXVIEW - loseTime / 1000.0 / DARKTIME;	// 每一段时间油灯的照明力会下降一个图块
     if (g_ViewArray < MINVIEW) g_ViewArray = MINVIEW;
 
+    //////////////////////////////////////////////////////////////
+    int r = int(g_BlockSize * g_ViewArray + 0.5);	// 计算视野半径
+    // 把视野正方形表示出来
 
+    //////////////////////////////////////////////////////////////
+    // 在这里应用裁剪算法，拿视野区域进行裁剪
+    // 实现Sutherland-Hodgman算法，传入视野正方形的结构体，然后以这个正方形为边界对polygonOrigin
+    // 进行裁剪，并将结果存入polygonCurrent
+
+    // 绘图填充
+    //
 
     return true;
 }
@@ -338,15 +348,6 @@ void rePaintMap()
 {
     g_MapImage.Resize(GAME_WIDTH * g_BlockSize, GAME_HEIGHT * g_BlockSize);	// 重置地图图片大小
     SetWorkingImage(&g_MapImage);								// 设置地图图片为当前工作图片
-
-    //////////////////////////////////////////////////////////////
-    int r = int(g_BlockSize * g_ViewArray + 0.5);	// 计算视野半径
-    // 把视野正方形表示出来
-    //////////////////////////////////////////////////////////////
-    // 在这里应用裁剪算法
-    // 绘图填充
-    // TODO
-    // 下面逻辑改动取决于裁剪实现的逻辑方式
 
     for (int i = 0; i < GAME_HEIGHT; i++)
     {
