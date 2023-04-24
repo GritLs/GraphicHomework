@@ -1,6 +1,8 @@
 #include <graphics.h>
 #include <stack>
 #include <vector>
+#include <iostream>
+using namespace std;
 using std::stack;				// 使用STL的栈
 using std::vector;				// 使用STL的数组容器
 
@@ -58,9 +60,9 @@ struct ThreeTypePolygons {
     vector<vector<POINT>> polygonEndPos;    //终点位置多边形
 }polygonOrigin, polygonCurrent;
 ThreeTypePolygons BlockToLine();             // 将墙体的块表示成点集用于多边形分割算法
-
+void clip_polygons(const vector<POINT> &viewSquare); //实现多边形裁剪
 // here test
-
+void draw_debugger(const ThreeTypePolygons &polygons);
 int main()
 {
     initGame();
@@ -241,15 +243,10 @@ void draw()
     ////////////////////改成rePaintMap()
     rePaintMap();
     ///////////////////////////////////
+    //测试画图
+    draw_debugger(polygonCurrent);
     // 绘制人
     drawPlayer();
-    // 绘制时间
-    TCHAR timeStr[256];
-    int loseTime = GetTickCount() - g_BeginTime;	// 计算流失的时间
-    //_stprintf_s(timeStr, _T("游戏时间:%02d:%02d"), loseTime / 1000 / 60, loseTime / 1000 % 60);
-    settextcolor(RGB(140, 140, 140));
-    outtextxy((WIN_WIDTH - textwidth(timeStr)) / 2, 3, timeStr);
-
     FlushBatchDraw();	// 刷新屏幕
 }
 
@@ -295,19 +292,96 @@ bool upDate()
     if (g_ViewArray < MINVIEW) g_ViewArray = MINVIEW;
 
     //////////////////////////////////////////////////////////////
-    int r = int(g_BlockSize * g_ViewArray + 0.5);	// 计算视野半径
+    int r = int(g_BlockSize * g_ViewArray + 0.5)/2;	// 计算视野半径
     // 把视野正方形表示出来
+    vector<POINT> viewSquare = {{g_PlayerPos.y-r,g_PlayerPos.x+r},
+                                {g_PlayerPos.y-r,g_PlayerPos.x-r},
+                                {g_PlayerPos.y+r,g_PlayerPos.x-r},
+                                {g_PlayerPos.y+r,g_PlayerPos.x+r}};//reverse
 
     //////////////////////////////////////////////////////////////
     // 在这里应用裁剪算法，拿视野区域进行裁剪
     // 实现Sutherland-Hodgman算法，传入视野正方形的结构体，然后以这个正方形为边界对polygonOrigin
     // 进行裁剪，并将结果存入polygonCurrent
+    clip_polygons(viewSquare);
 
     // 绘图填充
     //
 
     return true;
 }
+
+bool inside(POINT p, POINT A, POINT B) {
+    return (B.x - A.x) * (p.y - A.y) > (B.y - A.y) * (p.x - A.x);
+}
+
+POINT intersection(POINT prev, POINT cur, POINT A, POINT B) {
+//    float ua = ((B.x - A.x) * (prev.y - A.y) - (B.y - A.y) * (prev.x - A.x)) /
+//               ((B.y - A.y) * (cur.x - prev.x) - (B.x - A.x) * (cur.y - prev.y));
+//    POINT ret;
+//    ret.x = prev.x + ua * (cur.x - prev.x);
+//    ret.y = prev.y + ua * (cur.y - prev.y);
+//    return ret;
+    POINT ret;
+    if(A.y==B.y){
+        ret.y = A.y;
+        ret.x = prev.x + (A.y-prev.y)*(cur.x-prev.x)/(cur.y-prev.y);
+    }
+    else{
+        ret.x = A.x;
+        ret.y = prev.y + (A.x-prev.x)*(cur.y-prev.y)/(cur.x-prev.x);
+    }
+    return ret;
+}
+
+vector<POINT> sutherland_hodgman_clip(const vector<POINT> &polygon, const vector<POINT> &clip) {
+    vector<POINT> output = polygon;
+
+    for (int i = 0; i < 4; ++i) {
+        POINT A = clip[i];
+        POINT B = clip[(i + 1) % 4];
+
+        vector<POINT> input = output;
+        output.clear();
+
+        for (size_t j = 0; j < input.size(); ++j) {
+            POINT cur = input[j];
+            POINT prev = input[(j + input.size() - 1) % input.size()];
+            POINT p_int;
+            if (inside(cur, A, B)) {
+                if (!inside(prev, A, B)) {
+                    p_int = intersection(prev, cur, A, B);
+                    output.push_back({p_int.x - g_CameraPos.x, p_int.y - g_CameraPos.y});
+                }
+                output.push_back({cur.x - g_CameraPos.x, cur.y - g_CameraPos.y});
+            } else if (inside(prev, A, B)) {
+                p_int = intersection(prev, cur, A, B);
+                output.push_back({p_int.x - g_CameraPos.x, p_int.y - g_CameraPos.y});
+            }
+        }
+    }
+    return output;
+}
+
+void clip_polygons(const vector<POINT> &viewSquare) {
+//    ThreeTypePolygons polygonCurrent;
+    polygonCurrent.polygonWall.clear();
+    polygonCurrent.polygonFillState.clear();
+    polygonCurrent.polygonEndPos.clear();
+    for (const auto &polygon : polygonOrigin.polygonWall) {
+        polygonCurrent.polygonWall.push_back(sutherland_hodgman_clip(polygon, viewSquare));
+    }
+    for (const auto &polygon : polygonOrigin.polygonFillState) {
+        polygonCurrent.polygonFillState.push_back(sutherland_hodgman_clip(polygon, viewSquare));
+    }
+    for (const auto &polygon : polygonOrigin.polygonEndPos) {
+        polygonCurrent.polygonEndPos.push_back(sutherland_hodgman_clip(polygon, viewSquare));
+    }
+}
+
+
+
+
 
 void absDelay(int delay)
 {
@@ -344,6 +418,31 @@ void computeCameraPos()
     if (g_CameraPos.y > GAME_HEIGHT * g_BlockSize - WIN_HEIGHT)	g_CameraPos.y = GAME_HEIGHT * g_BlockSize - WIN_HEIGHT;
 }
 
+
+void draw_debugger(const ThreeTypePolygons &polygons) {
+    setcolor(GREEN);
+    for (const auto &polygon : polygons.polygonWall) {
+        for (size_t i = 0; i < polygon.size(); ++i) {
+            line(polygon[i].y, polygon[i].x, polygon[(i + 1) % polygon.size()].y, polygon[(i + 1) % polygon.size()].x);//reverse
+        }
+        if(polygon.size()!=0&&polygon.size()!=4) cout<<polygon.size()<<endl;
+    }
+
+//    for (const auto &polygon : polygons.polygonFillState) {
+//        for (size_t i = 0; i < polygon.size(); ++i) {
+//            line(polygon[i].x, polygon[i].y, polygon[(i + 1) % polygon.size()].x, polygon[(i + 1) % polygon.size()].y);
+//        }
+//        if(polygon.size()!=0&&polygon.size()!=4) cout<<polygon.size()<<endl;
+//    }
+//
+//    for (const auto &polygon : polygons.polygonEndPos) {
+//        for (size_t i = 0; i < polygon.size(); ++i) {
+//            line(polygon[i].x, polygon[i].y, polygon[(i + 1) % polygon.size()].x, polygon[(i + 1) % polygon.size()].y);
+//        }
+//        if(polygon.size()!=0&&polygon.size()!=4) cout<<polygon.size()<<endl;
+//    }
+}
+
 void rePaintMap()
 {
     g_MapImage.Resize(GAME_WIDTH * g_BlockSize, GAME_HEIGHT * g_BlockSize);	// 重置地图图片大小
@@ -370,6 +469,8 @@ void rePaintMap()
             }
         }
     }
+
+
     SetWorkingImage();	// 复位工作图片
 
     ////////////////////////////////////////////////////////////
