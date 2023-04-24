@@ -59,7 +59,7 @@ struct ThreeTypePolygons {
 }polygonOrigin, polygonCurrent;
 ThreeTypePolygons BlockToLine();             // 将墙体的块表示成点集用于多边形分割算法
 
-
+// here test
 
 int main()
 {
