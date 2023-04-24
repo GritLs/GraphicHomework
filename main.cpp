@@ -351,12 +351,12 @@ vector<POINT> sutherland_hodgman_clip(const vector<POINT> &polygon, const vector
             if (inside(cur, A, B)) {
                 if (!inside(prev, A, B)) {
                     p_int = intersection(prev, cur, A, B);
-                    output.push_back({p_int.x - g_CameraPos.x, p_int.y - g_CameraPos.y});
+                    output.push_back(p_int);
                 }
-                output.push_back({cur.x - g_CameraPos.x, cur.y - g_CameraPos.y});
+                output.push_back(cur);
             } else if (inside(prev, A, B)) {
                 p_int = intersection(prev, cur, A, B);
-                output.push_back({p_int.x - g_CameraPos.x, p_int.y - g_CameraPos.y});
+                output.push_back(p_int);
             }
         }
     }
@@ -421,9 +421,11 @@ void computeCameraPos()
 
 void draw_debugger(const ThreeTypePolygons &polygons) {
     setcolor(GREEN);
+//    cout << "camera:(" << g_CameraPos.x << ", " << g_CameraPos.y << ")\n";
     for (const auto &polygon : polygons.polygonWall) {
         for (size_t i = 0; i < polygon.size(); ++i) {
-            line(polygon[i].y, polygon[i].x, polygon[(i + 1) % polygon.size()].y, polygon[(i + 1) % polygon.size()].x);//reverse
+            line(polygon[i].y - g_CameraPos.x, polygon[i].x - g_CameraPos.y,
+                 polygon[(i + 1) % polygon.size()].y - g_CameraPos.x, polygon[(i + 1) % polygon.size()].x - g_CameraPos.y);//reverse
         }
         if(polygon.size()!=0&&polygon.size()!=4) cout<<polygon.size()<<endl;
     }
